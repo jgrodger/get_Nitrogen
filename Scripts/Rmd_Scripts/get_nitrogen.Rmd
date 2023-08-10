@@ -1,0 +1,93 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+here::i_am("Scripts/Rmd_Scripts/get_nitrogen.Rmd")
+
+library(tidyverse)
+library(terra)
+#library(ncdf4)
+library(sgo)
+library(here)
+```
+
+#Just use 2017 data
+```{r}
+
+#data from https://doi.org/10.5285/9b203324-6b37-4e91-b028-e073b197fb9f 
+
+nitro <- read_csv((here("./Data/Input_Data/ASSIST_N_dep_kgha_2017.csv")))
+
+
+```
+# check correlations
+```{r}
+
+nitro %>% 
+  select(grd_NHx_dry, grd_NOy_dry, grd_NHx_wet, grd_NOy_wet) %>%
+  filter(is.na(grd_NHx_dry) != T)%>%
+  cor()
+  
+
+```
+
+## Calculate total nitrogen
+```{r}
+
+
+nitro <- nitro %>%
+  mutate(total.n = grd_NHx_dry + grd_NOy_dry + grd_NHx_wet + grd_NOy_wet) %>% 
+  select(x, y, total.n, grd_NHx_dry, grd_NOy_dry, grd_NHx_wet, grd_NOy_wet) 
+
+head(nitro)
+```
+
+
+```{r}
+add.ngr<- function(data){
+ points <- sgo_points(data, coords = c("x", "y"), epsg=27700)
+points2 <- sgo_bng_ngr(points, digits = 4)
+data <- data %>%
+  mutate(ngr.1km = points2$ngr) %>%
+  mutate(ngr.1km =  str_replace_all(ngr.1km, " ", ""))
+  return(data)
+}
+```
+
+
+#get dataframe with  grid cell references 
+```{r}
+
+nitro <- add.ngr(nitro)
+
+#plot the data 
+nitro.raster <- rast(nitro)
+
+nitro.raster
+
+nitro.raster.1 <- nitro.raster[[1]]
+
+nitro.raster.1
+
+plot(nitro.raster.1)
+```
+
+
+## Write processed data
+```{r}
+
+write_rds(nitro, file = here("./Data/Processed_Data/nitro.rds"))
+
+
+f <- file.path(here(), "Data/Processed_Data/nitro.tif")
+
+writeRaster(nitro.raster.1, f, overwrite=TRUE, gdal=c("COMPRESS=NONE", "TFW=YES"), datatype='FLT8S')
+
+
+```
